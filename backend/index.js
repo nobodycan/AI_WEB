@@ -48,16 +48,14 @@ const fallbackTrends = [
   { title: '周末适合学习的新技术', hot: '新', url: 'https://s.weibo.com/top/summary' },
 ];
 
-app.get('/api/health', (_request, response) => {
-  response.json({ status: 'ok', service: 'personal-site-smart-demo' });
+// ── API Routes ──────────────────────────────────────────────
+app.get('/api/health', (_req, res) => {
+  res.json({ status: 'ok', service: 'personal-site-smart-demo' });
 });
 
-app.get('/api/weather', async (request, response) => {
-  const city = String(request.query.city || '').trim();
-
-  if (!city) {
-    return response.status(400).json({ message: '请提供城市名称' });
-  }
+app.get('/api/weather', async (req, res) => {
+  const city = String(req.query.city || '').trim();
+  if (!city) return res.status(400).json({ message: '请提供城市名称' });
 
   try {
     const geoUrl = new URL('https://geocoding-api.open-meteo.com/v1/search');
@@ -66,14 +64,12 @@ app.get('/api/weather', async (request, response) => {
     geoUrl.searchParams.set('language', 'zh');
     geoUrl.searchParams.set('format', 'json');
 
-    const geoResponse = await fetch(geoUrl);
-    if (!geoResponse.ok) throw new Error('城市查询服务暂不可用');
-    const geoData = await geoResponse.json();
+    const geoRes = await fetch(geoUrl);
+    if (!geoRes.ok) throw new Error('城市查询服务暂不可用');
+    const geoData = await geoRes.json();
     const location = geoData.results?.[0];
 
-    if (!location) {
-      return response.status(404).json({ message: `没有找到城市：${city}` });
-    }
+    if (!location) return res.status(404).json({ message: `没有找到城市：${city}` });
 
     const weatherUrl = new URL('https://api.open-meteo.com/v1/forecast');
     weatherUrl.searchParams.set('latitude', location.latitude);
@@ -83,12 +79,12 @@ app.get('/api/weather', async (request, response) => {
     weatherUrl.searchParams.set('timezone', 'auto');
     weatherUrl.searchParams.set('forecast_days', '1');
 
-    const weatherResponse = await fetch(weatherUrl);
-    if (!weatherResponse.ok) throw new Error('天气服务暂不可用');
-    const weatherData = await weatherResponse.json();
+    const weatherRes = await fetch(weatherUrl);
+    if (!weatherRes.ok) throw new Error('天气服务暂不可用');
+    const weatherData = await weatherRes.json();
     const [icon, description] = weatherCodes[weatherData.current.weather_code] || ['🌡️', '天气状态未知'];
 
-    return response.json({
+    return res.json({
       city: [location.name, location.admin1, location.country].filter(Boolean).join(' · '),
       temperature: weatherData.current.temperature_2m,
       windSpeed: weatherData.current.wind_speed_10m,
@@ -100,21 +96,21 @@ app.get('/api/weather', async (request, response) => {
       time: weatherData.current.time.replace('T', ' '),
     });
   } catch (error) {
-    return response.status(502).json({ message: error.message || '天气查询失败' });
+    return res.status(502).json({ message: error.message || '天气查询失败' });
   }
 });
 
-app.get('/api/weibo-hot', async (_request, response) => {
+app.get('/api/weibo-hot', async (_req, res) => {
   try {
-    const weiboResponse = await fetch('https://weibo.com/ajax/side/hotSearch', {
+    const weiboRes = await fetch('https://weibo.com/ajax/side/hotSearch', {
       headers: {
         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36',
         Referer: 'https://weibo.com/',
       },
     });
 
-    if (!weiboResponse.ok) throw new Error('微博热搜服务暂不可用');
-    const weiboData = await weiboResponse.json();
+    if (!weiboRes.ok) throw new Error('微博热搜服务暂不可用');
+    const weiboData = await weiboRes.json();
     const realtimeItems = weiboData.data?.realtime || [];
 
     const items = realtimeItems
@@ -130,20 +126,22 @@ app.get('/api/weibo-hot', async (_request, response) => {
       });
 
     if (!items.length) throw new Error('暂无热搜数据');
-    return response.json({ source: 'weibo', items });
-  } catch (_error) {
-    return response.json({ source: 'fallback', items: fallbackTrends });
+    return res.json({ source: 'weibo', items });
+  } catch {
+    return res.json({ source: 'fallback', items: fallbackTrends });
   }
 });
 
+// ── Static files (production: serve Vite build output) ──────
 app.use(express.static(distDir));
 
-app.use((_request, response) => {
-  response.sendFile(path.join(distDir, 'index.html'));
+// ── SPA fallback ─────────────────────────────────────────────
+app.use((_req, res) => {
+  res.sendFile(path.join(distDir, 'index.html'));
 });
 
 app.listen(port, '0.0.0.0', () => {
-  console.log(`Personal site server running at http://0.0.0.0:${port}`);
+  console.log(`Server running at http://0.0.0.0:${port}`);
 });
 
 function formatHotValue(value) {
